@@ -135,6 +135,7 @@ void readVectorFileWithID(
 		{
 			OGRFieldDefn * poField = poDefn->GetFieldDefn(i);
 			std::string strFieldName = poField->GetNameRef();
+			OGRFieldType theType = poField->GetType();
 			std::string strFieldTypeName = poField->GetFieldTypeName(poField->GetType());
 			int fieldWidth = poField->GetWidth();
 			int precision = poField->GetPrecision();
@@ -160,6 +161,15 @@ void readVectorFileWithID(
 		{
 			continue;
 		}
+		//几何体
+		OGRGeometry * poGeometry = poFeature->GetGeometryRef();
+		if (poGeometry == NULL)
+		{
+			continue;
+		}
+
+		OGRwkbGeometryType theGeometryType = poGeometry->getGeometryType();
+		
 		std::vector<std::string> strFieldNameVec;
 		strFieldNameVec.clear();
 		for (int j = 0; j < iFieldCount; j++)
@@ -174,6 +184,83 @@ void readVectorFileWithID(
 		mapFeatureSet.insert(std::pair<int, std::vector<std::string>>(mapSetID, strFieldNameVec));
 		mapSetID++;
 		strFieldNameVec.clear();
+	}
+	GDALClose(poDS);
+
+}
+
+
+//读取矢量文件中的多边形 ,
+void getPolygonVectorFromShpFile(
+	const char * pszVectorFileName,
+	std::vector<OGRPolygon*>& polygonVector
+	)
+{
+	//为了支持中文路径，加上下面的代码
+	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");
+	//为了支持中文属性名称，加上下面的代码
+	CPLSetConfigOption("SHAPE_ENCODING", "NO");
+	//注册所有驱动
+	GDALAllRegister();
+	//打开数据
+	GDALDataset * poDS = (GDALDataset*)GDALOpenEx(pszVectorFileName, GDAL_OF_VECTOR, NULL, NULL, NULL);
+	if (poDS == NULL)
+	{
+		printf("Open failed.\n");
+		exit(1);
+	}
+	printf("打开数据源成功！\n");
+	//获取图层个数
+	int layerCount = poDS->GetLayerCount();
+	std::cout << "层数：" << layerCount << std::endl;
+
+	//获取第一个图层
+	OGRLayer * poLayer = poDS->GetLayer(0);
+	if (poLayer == NULL)
+	{
+		std::cout << "获取图层失败" << std::endl;
+		return;
+	}
+	//对图层进行初始化，
+	poLayer->ResetReading();
+
+	//输出图层中的要素个数
+	int featureCount = poLayer->GetFeatureCount();
+	std::cout << "图层要素个数:" << featureCount << std::endl;
+
+	//遍历图层中的要素,将多边形读取到集合中
+	for (int i = 0; i < featureCount; i++)
+	{
+		std::cout << "当前处理第" << i << "个要素" << std::endl;
+		OGRFeature * poFeature = poLayer->GetFeature(i);
+		if (poFeature == NULL)
+		{
+			continue;
+		}
+		//几何体
+		OGRGeometry * poGeometry = poFeature->GetGeometryRef();
+		if (poGeometry == NULL)
+		{
+			continue;
+		}
+
+		OGRwkbGeometryType theGeometryType = poGeometry->getGeometryType();
+		if (theGeometryType == wkbPolygon)
+		{	
+			OGRPolygon * thePolygon = (OGRPolygon*)poGeometry;
+			polygonVector.push_back(thePolygon);
+		}
+		else if (theGeometryType == wkbMultiPolygon)
+		{
+			OGRMultiPolygon * theMulti = (OGRMultiPolygon*)poGeometry;
+			for (int i = 0; i < theMulti->getNumGeometries(); i++)
+			{
+				OGRPolygon * thePolygon = (OGRPolygon*)theMulti->getGeometryRef(i);
+				polygonVector.push_back(thePolygon);
+
+			}
+		}
+	
 	}
 	GDALClose(poDS);
 
@@ -237,19 +324,16 @@ void writeCSV(
 int main()
 {
 
-	std::map<int, std::vector<std::string>> mapFeatureSet;
-	mapFeatureSet.clear();
-	std::vector<std::string> strDefnVec;
-	strDefnVec.clear();
-	int featureSetID = 0;
-	bool bHaveReadFeatureDefn = false;
+	std::vector<OGRPolygon* > polygonVector;
+	polygonVector.clear();
 	//读取cut1_output.shp到cut11_output.shp
 	for (int i = 1; i < 12; i++)
 	{
 		std::string strID = std::to_string(i);
 		std::string strShpName = "E:\\ShpResult\\cut" + strID + "_OutShp.shp";
-		readVectorFileWithID(strShpName.c_str(),featureSetID,bHaveReadFeatureDefn, mapFeatureSet, strDefnVec);
+		getPolygonVectorFromShpFile(strShpName.c_str(),polygonVector);
 	}
+	
 	//const char * pszVectorFileName = "E:\\poyangcut\\poyangcut\\shp\\poyanghu.shp";
 	//const char * pszVectorFileName = "E:\\shpExcel\\PonitShp\\AllWater.shp";
 
@@ -283,11 +367,11 @@ int main()
 	}
 	*/
 	//输出到.csv
-	std::string strCSVFileName = "E:\\tifAll.csv";
-	writeCSV(strCSVFileName, mapFeatureSet, strDefnVec);
+	//std::string strCSVFileName = "E:\\tifAll.csv";
+	//writeCSV(strCSVFileName, mapFeatureSet, strDefnVec);
 
 	//清空资源
-	mapFeatureSet.clear();
-	strDefnVec.clear();
+	//mapFeatureSet.clear();
+	//strDefnVec.clear();
 	return 0;
 }
