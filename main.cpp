@@ -75,9 +75,9 @@ void readVectorFile(const char * pszVectorFileName,
 		{
 			OGRFieldDefn * poFieldDefn = poDefn->GetFieldDefn(j);
 			const char* strFieldDefnName = poFieldDefn->GetNameRef();
-			std::cout << strFieldDefnName << std::endl;
+			//std::cout << strFieldDefnName << std::endl;
 			std::string strFieldName = poFeature->GetFieldAsString(j);
-			std::cout << strFieldName << std::endl;
+			//std::cout << strFieldName << std::endl;
 			strFieldNameVec.push_back(strFieldName);
 		}
 		mapFeatureSet.insert(std::pair<int, std::vector<std::string>>(i, strFieldNameVec));
@@ -87,6 +87,97 @@ void readVectorFile(const char * pszVectorFileName,
 
 }
 
+//读取矢量 ,
+void readVectorFileWithID(
+	const char * pszVectorFileName,
+	int &mapSetID,  //图元集合的ID
+	bool & bHaveReadDefn,//是否读取属性定义，如果没有，则读取；如果读过了，则不再读取
+	std::map<int, std::vector<std::string>>& mapFeatureSet,
+	std::vector<std::string>& strDefnVec
+	)
+{
+	//为了支持中文路径，加上下面的代码
+	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");
+	//为了支持中文属性名称，加上下面的代码
+	CPLSetConfigOption("SHAPE_ENCODING", "NO");
+	//注册所有驱动
+	GDALAllRegister();
+	//打开数据
+	GDALDataset * poDS = (GDALDataset*)GDALOpenEx(pszVectorFileName, GDAL_OF_VECTOR, NULL, NULL, NULL);
+	if (poDS == NULL)
+	{
+		printf("Open failed.\n");
+		exit(1);
+	}
+	printf("打开数据源成功！\n");
+	//获取图层个数
+	int layerCount = poDS->GetLayerCount();
+	std::cout << "层数：" << layerCount << std::endl;
+
+	//获取第一个图层
+	OGRLayer * poLayer = poDS->GetLayer(0);
+	if (poLayer == NULL)
+	{
+		std::cout << "获取图层失败" << std::endl;
+		return;
+	}
+	//对图层进行初始化，
+	poLayer->ResetReading();
+	//获取图层中的属性表表头并输出
+	std::cout << "属性表结构信息：" << std::endl;
+	OGRFeatureDefn * poDefn = poLayer->GetLayerDefn();
+	int iFieldCount = poDefn->GetFieldCount();
+	//潘段是否读取过属性类型定义，如果没有读过，则读取
+	if (!bHaveReadDefn)
+	{
+		bHaveReadDefn = true;
+		for (int i = 0; i < iFieldCount; i++)
+		{
+			OGRFieldDefn * poField = poDefn->GetFieldDefn(i);
+			std::string strFieldName = poField->GetNameRef();
+			std::string strFieldTypeName = poField->GetFieldTypeName(poField->GetType());
+			int fieldWidth = poField->GetWidth();
+			int precision = poField->GetPrecision();
+			std::cout << "属性名：" << strFieldName << std::endl;
+			std::cout << "类型：" << strFieldTypeName << std::endl;
+			std::cout << "宽度：" << fieldWidth << std::endl;
+			std::cout << "精度：" << precision << std::endl;
+			strDefnVec.push_back(strFieldName);
+
+		}
+	}
+
+	//输出图层中的要素个数
+	int featureCount = poLayer->GetFeatureCount();
+	std::cout << "图层要素个数:" << featureCount << std::endl;
+
+	//遍历图层中的要素,读取到集合中
+	for (int i = 0; i < featureCount; i++)
+	{
+		std::cout << "当前处理第" << i << "个要素" << std::endl;
+		OGRFeature * poFeature = poLayer->GetFeature(i);
+		if (poFeature == NULL)
+		{
+			continue;
+		}
+		std::vector<std::string> strFieldNameVec;
+		strFieldNameVec.clear();
+		for (int j = 0; j < iFieldCount; j++)
+		{
+			OGRFieldDefn * poFieldDefn = poDefn->GetFieldDefn(j);
+			const char* strFieldDefnName = poFieldDefn->GetNameRef();
+			//std::cout << strFieldDefnName << std::endl;
+			std::string strFieldName = poFeature->GetFieldAsString(j);
+			//std::cout << strFieldName << std::endl;
+			strFieldNameVec.push_back(strFieldName);
+		}
+		mapFeatureSet.insert(std::pair<int, std::vector<std::string>>(mapSetID, strFieldNameVec));
+		mapSetID++;
+		strFieldNameVec.clear();
+	}
+	GDALClose(poDS);
+
+}
 //写文件
 void writeCSV(
 	std::string strCSVName,
@@ -145,12 +236,29 @@ void writeCSV(
 }
 int main()
 {
-	const char * pszVectorFileName = "E:\\poyangcut\\poyangcut\\shp\\poyanghu.shp";
+
 	std::map<int, std::vector<std::string>> mapFeatureSet;
 	mapFeatureSet.clear();
 	std::vector<std::string> strDefnVec;
 	strDefnVec.clear();
-	readVectorFile(pszVectorFileName, mapFeatureSet, strDefnVec);
+	int featureSetID = 0;
+	bool bHaveReadFeatureDefn = false;
+	//读取cut1_output.shp到cut11_output.shp
+	for (int i = 1; i < 12; i++)
+	{
+		std::string strID = std::to_string(i);
+		std::string strShpName = "E:\\ShpResult\\cut" + strID + "_OutShp.shp";
+		readVectorFileWithID(strShpName.c_str(),featureSetID,bHaveReadFeatureDefn, mapFeatureSet, strDefnVec);
+	}
+	//const char * pszVectorFileName = "E:\\poyangcut\\poyangcut\\shp\\poyanghu.shp";
+	//const char * pszVectorFileName = "E:\\shpExcel\\PonitShp\\AllWater.shp";
+
+	//std::map<int, std::vector<std::string>> mapFeatureSet;
+	//mapFeatureSet.clear();
+	//std::vector<std::string> strDefnVec;
+	//strDefnVec.clear();
+	//readVectorFile(pszVectorFileName, mapFeatureSet, strDefnVec);
+	/*
 	std::cout << "输出excel头" << std::endl;
 	for (int i = 0; i < strDefnVec.size(); i++)
 	{
@@ -173,9 +281,9 @@ int main()
 			std::cout << theFeatureName << std::endl;
 		}
 	}
-
+	*/
 	//输出到.csv
-	std::string strCSVFileName = "E:\\poyangcut\\poyangcut\\shp\\poyanghu.csv";
+	std::string strCSVFileName = "E:\\tifAll.csv";
 	writeCSV(strCSVFileName, mapFeatureSet, strDefnVec);
 
 	//清空资源
