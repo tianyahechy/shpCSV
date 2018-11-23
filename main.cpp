@@ -321,6 +321,59 @@ void writeCSV(
 	outFile.close();
 
 }
+//创建shp文件
+void createShpVector(std::vector<OGRPolygon*> polygonVector, std::string strShpFileName)
+{
+	//如果数组为空，则返回
+	int theSize = polygonVector.size();
+	if (theSize == 0)
+	{
+		return;
+	}
+	//为了支持中文路径，加上下面的代码
+	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");
+	//为了支持中文属性名称，加上下面的代码
+	CPLSetConfigOption("SHAPE_ENCODING", "NO");
+	//注册所有驱动
+	GDALAllRegister();
+	//创建shp文件
+	const char * pszDriverName = "ESRI Shapefile";
+	GDALDriver * poDriver = GetGDALDriverManager()->GetDriverByName(pszDriverName);
+	if (!poDriver)
+	{
+		std::cout << pszDriverName << "驱动不可用！" << std::endl;
+		return;
+	}
+	std::cout << "驱动可用!" << std::endl;
+	//创建数据集
+	GDALDataset * poDS = poDriver->Create(strShpFileName.c_str(), 0, 0, 0, GDALDataType::GDT_Unknown, NULL);
+	if (poDS == NULL)
+	{
+		std::cout << "创建矢量文件" << strShpFileName << "失败!" << std::endl;
+		return;
+	}
+	std::cout << "创建矢量文件" << strShpFileName << "成功!" << std::endl;
+	//创建图层
+	OGRLayer * poLayer = poDS->CreateLayer("testLayer", NULL, wkbPolygon, NULL);
+	if (poLayer == NULL)
+	{
+		std::cout << "创建图层失败!" << std::endl;
+		return;
+	}
+	std::cout << "创建图层成功！" << std::endl;
+	OGRFeatureDefn * poDefn = poLayer->GetLayerDefn();
+	//创建要素
+	for (int i = 0; i < theSize; i++)
+	{
+		OGRFeature * theFeature = OGRFeature::CreateFeature(poDefn);
+		OGRPolygon * thePolygon = polygonVector[i];
+		theFeature->SetGeometry(thePolygon);
+		poLayer->CreateFeature(theFeature);
+		OGRFeature::DestroyFeature(theFeature);
+	}
+
+	GDALClose(poDS);
+}
 int main()
 {
 
@@ -330,10 +383,18 @@ int main()
 	for (int i = 1; i < 12; i++)
 	{
 		std::string strID = std::to_string(i);
-		std::string strShpName = "E:\\ShpResult\\cut" + strID + "_OutShp.shp";
+		std::string strShpName = "E:\\software\\TestData_71345\\TestData\\result\\ShpResult\\cut" + strID + "_OutShp.shp";
 		getPolygonVectorFromShpFile(strShpName.c_str(),polygonVector);
 	}
 	
+	//计算是否相交,相交则相并
+	//std::vector<OGRPolygon*> resultPolygonVector =  unionElements(polygonVector);
+
+	//创建一个shp文件，添加上这些
+	std::string strResultShpFileName = "E:\\resultVector2.shp";
+	//createShpVector(resultPolygonVector, strResultShpFileName);
+	createShpVector(polygonVector, strResultShpFileName);
+
 	//const char * pszVectorFileName = "E:\\poyangcut\\poyangcut\\shp\\poyanghu.shp";
 	//const char * pszVectorFileName = "E:\\shpExcel\\PonitShp\\AllWater.shp";
 
